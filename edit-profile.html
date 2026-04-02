@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Edit Profile — Instagram</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Grand+Hotel&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="app-body">
+
+  <header class="top-nav">
+    <button class="icon-btn" onclick="history.back()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <h2 class="upload-title">Edit Profile</h2>
+    <button class="share-btn" id="saveBtn" onclick="saveProfile()">Save</button>
+  </header>
+
+  <main class="main-content edit-profile-main">
+
+    <!-- Avatar section -->
+    <div class="edit-avatar-section">
+      <div class="edit-avatar-wrap" onclick="document.getElementById('avatarInput').click()">
+        <div class="edit-avatar-img" id="editAvatarDisplay">
+          <span id="editAvatarLetter">U</span>
+          <img id="editAvatarImg" src="" alt="" style="display:none"/>
+        </div>
+        <div class="edit-avatar-overlay">
+          <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        </div>
+      </div>
+      <button class="change-avatar-text" onclick="document.getElementById('avatarInput').click()">Change profile photo</button>
+      <input type="file" id="avatarInput" accept="image/*" style="display:none" onchange="previewAvatar(event)"/>
+    </div>
+
+    <div class="edit-fields">
+
+      <div class="edit-field-group">
+        <label class="edit-label">Name</label>
+        <input type="text" id="editName" class="edit-input" placeholder="Full name" maxlength="50"/>
+      </div>
+
+      <div class="edit-field-group">
+        <label class="edit-label">Username</label>
+        <input type="text" id="editUsername" class="edit-input" placeholder="Username" maxlength="30"/>
+        <p class="edit-hint">Username can only contain letters, numbers, periods and underscores.</p>
+      </div>
+
+      <div class="edit-field-group">
+        <label class="edit-label">Bio</label>
+        <textarea id="editBio" class="edit-textarea" placeholder="Bio" maxlength="150" rows="3"></textarea>
+        <div class="edit-char-count" id="bioCount">0 / 150</div>
+      </div>
+
+      <div class="edit-field-group">
+        <label class="edit-label">Website</label>
+        <input type="url" id="editWebsite" class="edit-input" placeholder="Website"/>
+      </div>
+
+      <hr class="detail-divider"/>
+
+      <div class="edit-field-group">
+        <label class="edit-label edit-label-section">Personal information</label>
+      </div>
+
+      <div class="edit-field-group">
+        <label class="edit-label">Email</label>
+        <input type="email" id="editEmail" class="edit-input" placeholder="Email" disabled/>
+        <p class="edit-hint">Email can't be changed here.</p>
+      </div>
+
+    </div>
+
+    <p class="save-error hidden" id="saveError"></p>
+    <p class="save-success hidden" id="saveSuccess">✓ Profile saved!</p>
+
+  </main>
+
+  <script src="auth.js"></script>
+  <script>
+    let currentUser = null;
+    let newAvatarFile = null;
+
+    supabaseClient.auth.getSession().then(({ data: { session } }) => {
+      if (!session) { window.location.href = 'index.html'; return; }
+      currentUser = session.user;
+      loadProfile();
+    });
+
+    async function loadProfile() {
+      const { data: profile } = await supabaseClient
+        .from('profiles').select('*').eq('id', currentUser.id).single();
+
+      if (!profile) return;
+
+      document.getElementById('editName').value = profile.full_name || '';
+      document.getElementById('editUsername').value = profile.username || '';
+      document.getElementById('editBio').value = profile.bio || '';
+      document.getElementById('editWebsite').value = profile.website || '';
+      document.getElementById('editEmail').value = currentUser.email || '';
+      document.getElementById('bioCount').textContent = `${(profile.bio || '').length} / 150`;
+
+      const letter = (profile.username || currentUser.email || 'U')[0].toUpperCase();
+      document.getElementById('editAvatarLetter').textContent = letter;
+
+      if (profile.avatar_url) {
+        document.getElementById('editAvatarImg').src = profile.avatar_url;
+        document.getElementById('editAvatarImg').style.display = 'block';
+        document.getElementById('editAvatarLetter').style.display = 'none';
+      }
+    }
+
+    document.getElementById('editBio')?.addEventListener('input', function() {
+      document.getElementById('bioCount').textContent = `${this.value.length} / 150`;
+    });
+
+    function previewAvatar(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      newAvatarFile = file;
+      const url = URL.createObjectURL(file);
+      document.getElementById('editAvatarImg').src = url;
+      document.getElementById('editAvatarImg').style.display = 'block';
+      document.getElementById('editAvatarLetter').style.display = 'none';
+    }
+
+    async function saveProfile() {
+      const btn = document.getElementById('saveBtn');
+      btn.textContent = 'Saving…';
+      btn.disabled = true;
+
+      const errEl = document.getElementById('saveError');
+      const sucEl = document.getElementById('saveSuccess');
+      errEl.classList.add('hidden');
+      sucEl.classList.add('hidden');
+
+      try {
+        let avatarUrl = null;
+
+        // Upload avatar if changed
+        if (newAvatarFile) {
+          const ext = newAvatarFile.name.split('.').pop();
+          const fileName = `avatars/${currentUser.id}.${ext}`;
+          const { error: uploadErr } = await supabaseClient.storage
+            .from('posts')
+            .upload(fileName, newAvatarFile, { upsert: true });
+          if (uploadErr) throw uploadErr;
+          const { data: urlData } = supabaseClient.storage.from('posts').getPublicUrl(fileName);
+          avatarUrl = urlData.publicUrl;
+        }
+
+        const updates = {
+          full_name: document.getElementById('editName').value.trim(),
+          username:  document.getElementById('editUsername').value.trim(),
+          bio:       document.getElementById('editBio').value.trim(),
+          website:   document.getElementById('editWebsite').value.trim(),
+        };
+        if (avatarUrl) updates.avatar_url = avatarUrl;
+
+        const { error } = await supabaseClient
+          .from('profiles').update(updates).eq('id', currentUser.id);
+
+        if (error) throw error;
+
+        sucEl.classList.remove('hidden');
+        setTimeout(() => window.location.href = 'profile.html', 1000);
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.classList.remove('hidden');
+      }
+
+      btn.textContent = 'Save';
+      btn.disabled = false;
+    }
+  </script>
+</body>
+</html>
+ 
