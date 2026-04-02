@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Instagram</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Grand+Hotel&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="auth-body">
+
+  <div class="auth-wrapper">
+
+    <!-- Logo Card -->
+    <div class="auth-card">
+      <div class="logo-wrap">
+        <h1 class="logo">Instagram</h1>
+      </div>
+
+      <!-- Toggle: Login / Signup -->
+      <div class="tab-toggle">
+        <button class="tab-btn active" id="loginTab" onclick="showTab('login')">Log In</button>
+        <button class="tab-btn" id="signupTab" onclick="showTab('signup')">Sign Up</button>
+      </div>
+
+      <!-- Login Form -->
+      <div id="loginForm" class="form-section">
+        <input type="email" id="loginEmail" class="input-field" placeholder="Email" autocomplete="email"/>
+        <input type="password" id="loginPassword" class="input-field" placeholder="Password" autocomplete="current-password"/>
+        <p class="error-msg" id="loginError"></p>
+        <button class="btn-primary" onclick="handleLogin()">Log In</button>
+        <p class="forgot-link"><a href="#">Forgot password?</a></p>
+      </div>
+
+      <!-- Signup Form -->
+      <div id="signupForm" class="form-section hidden">
+        <input type="text" id="signupUsername" class="input-field" placeholder="Username"/>
+        <input type="email" id="signupEmail" class="input-field" placeholder="Email"/>
+        <input type="password" id="signupPassword" class="input-field" placeholder="Password (min 6 chars)" autocomplete="new-password"/>
+        <p class="error-msg" id="signupError"></p>
+        <button class="btn-primary" onclick="handleSignup()">Sign Up</button>
+      </div>
+
+      <div class="divider"><span>OR</span></div>
+
+      <p class="auth-footer-text">
+        <span id="switchText">Don't have an account?</span>
+        <a href="#" id="switchLink" onclick="toggleTab()"> Sign up</a>
+      </p>
+    </div>
+
+    <!-- App store badges (decorative) -->
+    <div class="app-badge-card">
+      <p>Get the app.</p>
+      <div class="badge-row">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Download_on_the_App_Store_Badge.svg/200px-Download_on_the_App_Store_Badge.svg.png" alt="App Store" class="badge-img"/>
+        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/78/Google_Play_Store_badge_EN.svg/200px-Google_Play_Store_badge_EN.svg.png" alt="Google Play" class="badge-img"/>
+      </div>
+    </div>
+
+  </div>
+
+  <footer class="auth-footer">
+    <nav>
+      <a href="#">Meta</a><a href="#">About</a><a href="#">Blog</a>
+      <a href="#">Jobs</a><a href="#">Help</a><a href="#">API</a>
+      <a href="#">Privacy</a><a href="#">Terms</a>
+    </nav>
+    <p>© 2025 Instagram from Meta</p>
+  </footer>
+
+  <script src="auth.js"></script>
+  <script>
+    let currentTab = 'login';
+
+    function showTab(tab) {
+      currentTab = tab;
+      document.getElementById('loginForm').classList.toggle('hidden', tab !== 'login');
+      document.getElementById('signupForm').classList.toggle('hidden', tab !== 'signup');
+      document.getElementById('loginTab').classList.toggle('active', tab === 'login');
+      document.getElementById('signupTab').classList.toggle('active', tab === 'signup');
+      document.getElementById('switchText').textContent = tab === 'login' ? "Don't have an account?" : "Have an account?";
+      document.getElementById('switchLink').textContent = tab === 'login' ? ' Sign up' : ' Log in';
+    }
+
+    function toggleTab() {
+      showTab(currentTab === 'login' ? 'signup' : 'login');
+    }
+  </script>
+</body>
+</html>
+ 
