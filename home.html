@@ -177,7 +177,7 @@
       const letter = username[0].toUpperCase();
       const timeAgo = getTimeAgo(post.created_at);
       return `
-        <article class="post-card" id="post-${post.id}">
+        <article class="post-card" id="post-${post.id}" data-liked="false" data-likes="${post.likes_count || 0}">
           <div class="post-header">
             <div class="post-avatar">${letter}</div>
             <div class="post-meta">
@@ -186,13 +186,16 @@
             </div>
             <button class="icon-btn more-btn">•••</button>
           </div>
-          <img class="post-image" src="${post.image_url}" alt="post" loading="lazy" ondblclick="likePost('${post.id}', this)"/>
+          <div class="post-img-wrap" ondblclick="likePost('${post.id}', true)" onclick="handleImgClick(event, '${post.id}')">
+            <img class="post-image" src="${post.image_url}" alt="post" loading="lazy"/>
+            <div class="heart-burst-wrap" id="burst-${post.id}"></div>
+          </div>
           <div class="post-actions-wrap">
             <div class="post-actions">
-              <button class="action-btn" onclick="likePost('${post.id}', this)">
+              <button class="action-btn like-btn" id="like-${post.id}" onclick="likePost('${post.id}', false)">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
               </button>
-              <button class="action-btn">
+              <button class="action-btn" onclick="window.location.href='post.html?id=${post.id}'">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
               </button>
               <button class="action-btn">
@@ -203,30 +206,61 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
             </button>
           </div>
-          <div class="post-likes"><strong>${post.likes_count || 0} likes</strong></div>
+          <div class="post-likes" id="likes-${post.id}"><strong>${post.likes_count || 0} likes</strong></div>
           <div class="post-caption"><strong>${username}</strong> ${post.caption || ''}</div>
+          <button class="view-comments-btn" onclick="window.location.href='post.html?id=${post.id}'">View all comments</button>
           <div class="post-time">${timeAgo}</div>
         </article>
       `;
     }
 
-    async function likePost(postId, el) {
-      // Optimistic UI
-      const card = document.getElementById('post-' + postId);
-      const heartBtn = card.querySelector('.action-btn svg path');
-      const likesEl = card.querySelector('.post-likes strong');
-      const current = parseInt(likesEl.textContent) || 0;
-      const isLiked = card.dataset.liked === 'true';
-      card.dataset.liked = !isLiked;
-      likesEl.textContent = `${isLiked ? current - 1 : current + 1} likes`;
-      if (heartBtn) heartBtn.style.fill = isLiked ? 'none' : '#ef4444';
+    // Double tap detection for feed image
+    let lastTap = {};
+    function handleImgClick(e, postId) {
+      const now = Date.now();
+      if (lastTap[postId] && now - lastTap[postId] < 350) {
+        likePost(postId, true);
+      }
+      lastTap[postId] = now;
+    }
 
-      // Heart burst animation
-      const burst = document.createElement('div');
-      burst.className = 'heart-burst';
-      burst.innerHTML = '❤️';
-      if (el.tagName === 'IMG') { el.parentElement.appendChild(burst); }
-      setTimeout(() => burst.remove(), 800);
+    async function likePost(postId, fromDoubleTap) {
+      const card = document.getElementById('post-' + postId);
+      const isLiked = card.dataset.liked === 'true';
+      let count = parseInt(card.dataset.likes) || 0;
+
+      // If double tap and already liked, don't unlike
+      if (fromDoubleTap && isLiked) {
+        showBurst(postId); return;
+      }
+
+      const newLiked = !isLiked;
+      const newCount = newLiked ? count + 1 : Math.max(0, count - 1);
+
+      // Optimistic UI
+      card.dataset.liked = newLiked;
+      card.dataset.likes = newCount;
+      document.getElementById('likes-' + postId).innerHTML = `<strong>${newCount} likes</strong>`;
+      const btn = document.getElementById('like-' + postId);
+      btn.innerHTML = newLiked
+        ? `<svg viewBox="0 0 24 24" fill="#ef4444" stroke="#ef4444" stroke-width="1.8"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>`
+        : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>`;
+
+      if (newLiked && fromDoubleTap) showBurst(postId);
+
+      // DB
+      if (newLiked) {
+        await supabaseClient.from('likes').insert({ post_id: postId, user_id: currentUser.id });
+      } else {
+        await supabaseClient.from('likes').delete().eq('post_id', postId).eq('user_id', currentUser.id);
+      }
+      await supabaseClient.from('posts').update({ likes_count: newCount }).eq('id', postId);
+    }
+
+    function showBurst(postId) {
+      const wrap = document.getElementById('burst-' + postId);
+      wrap.innerHTML = '<span class="heart-burst">❤️</span>';
+      setTimeout(() => { wrap.innerHTML = ''; }, 900);
     }
 
     function getTimeAgo(dateStr) {
