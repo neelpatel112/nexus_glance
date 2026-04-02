@@ -923,4 +923,214 @@ img { display: block; width: 100%; }
   white-space: nowrap;
 }
 .comment-post-btn:disabled { opacity: 0.35; }
+
+/* ─── PHASE 4 — SEARCH & FOLLOW ──────────────────────────────── */
+
+/* Search nav */
+.search-nav { padding: 8px 16px; }
+.search-bar-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  background: var(--ig-gray-100);
+  border: 1px solid var(--ig-gray-200);
+  border-radius: 10px;
+  padding: 0 12px;
+  gap: 8px;
+  height: 36px;
+}
+.search-icon { width: 16px; height: 16px; color: var(--ig-gray-400); flex-shrink: 0; }
+.search-bar-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  font-family: var(--font);
+  color: var(--ig-gray-600);
+  outline: none;
+}
+.search-bar-input::placeholder { color: var(--ig-gray-400); }
+.clear-btn {
+  color: var(--ig-gray-400);
+  font-size: 13px;
+  padding: 2px 4px;
+  font-family: var(--font);
+}
+
+/* Explore grid */
+.search-main { padding: 0; }
+.explore-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+}
+.explore-item {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  cursor: pointer;
+}
+.explore-item.explore-big {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+.explore-item img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s;
+}
+.explore-item:hover img { transform: scale(1.04); }
+.explore-overlay {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.3);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity 0.2s;
+  color: white; font-size: 13px; font-weight: 600;
+}
+.explore-item:hover .explore-overlay { opacity: 1; }
+.explore-empty {
+  grid-column: span 3;
+  padding: 48px;
+  text-align: center;
+  color: var(--ig-gray-400);
+  font-size: 14px;
+}
+
+/* Skeleton explore */
+.skeleton-explore {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+}
+.sk-grid-item { aspect-ratio: 1; }
+
+/* Search loading spinner */
+.search-loading {
+  display: flex;
+  justify-content: center;
+  padding: 32px;
+}
+.spinner {
+  width: 24px; height: 24px;
+  border: 2px solid var(--ig-gray-200);
+  border-top-color: var(--ig-gray-600);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* User result items */
+.user-result-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--ig-gray-100);
+  gap: 12px;
+}
+.user-result-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  cursor: pointer;
+  min-width: 0;
+}
+.user-avatar-med {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: var(--ig-gradient);
+  color: white;
+  font-size: 16px;
+  font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.user-result-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.user-result-username {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ig-gray-600);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.user-result-name {
+  font-size: 12px;
+  color: var(--ig-gray-400);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.user-result-followers {
+  font-size: 11px;
+  color: var(--ig-gray-400);
+}
+
+/* Follow button (search results) */
+.follow-btn {
+  padding: 6px 16px;
+  background: var(--ig-blue);
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  font-family: var(--font);
+  transition: all 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.follow-btn.following {
+  background: white;
+  color: var(--ig-gray-600);
+  border: 1px solid var(--ig-gray-200);
+}
+.follow-btn:disabled { opacity: 0.6; }
+
+/* No results */
+.no-results {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 56px 32px;
+  gap: 8px;
+  text-align: center;
+}
+.no-results svg { width: 48px; height: 48px; color: var(--ig-gray-400); }
+.no-results p { font-size: 16px; font-weight: 600; color: var(--ig-gray-600); }
+.no-results span { font-size: 14px; color: var(--ig-gray-400); }
+
+/* User profile page follow actions */
+.user-profile-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.follow-btn-large {
+  flex: 1;
+  padding: 8px;
+  background: var(--ig-blue);
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 8px;
+  font-family: var(--font);
+  transition: all 0.2s;
+}
+.follow-btn-large.following {
+  background: white;
+  color: var(--ig-gray-600);
+  border: 1px solid var(--ig-gray-200);
+}
+.follow-btn-large:disabled { opacity: 0.6; }
+.message-btn {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 700;
+}
  
