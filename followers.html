@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Followers — Instagram</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Grand+Hotel&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="app-body">
+
+  <header class="top-nav">
+    <button class="icon-btn" onclick="history.back()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <h2 class="upload-title" id="pageTitle">Followers</h2>
+    <div style="width:40px"></div>
+  </header>
+
+  <main class="main-content">
+
+    <!-- Tab toggle -->
+    <div class="followers-tabs">
+      <button class="followers-tab" id="tabFollowers" onclick="switchTab('followers')">Followers</button>
+      <button class="followers-tab" id="tabFollowing" onclick="switchTab('following')">Following</button>
+    </div>
+
+    <div id="listContainer"></div>
+
+    <div class="search-loading hidden" id="listLoading">
+      <div class="spinner"></div>
+    </div>
+
+    <div class="no-results hidden" id="emptyList">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
+      <p id="emptyMsg">No followers yet.</p>
+    </div>
+
+  </main>
+
+  <script src="auth.js"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const profileId = params.get('id');
+    const startTab  = params.get('tab') || 'followers';
+    let currentUser = null;
+    let myFollowingIds = new Set();
+
+    supabaseClient.auth.getSession().then(({ data: { session } }) => {
+      if (!session) { window.location.href = 'index.html'; return; }
+      currentUser = session.user;
+      switchTab(startTab);
+    });
+
+    async function getMyFollowing() {
+      const { data } = await supabaseClient
+        .from('follows').select('following_id').eq('follower_id', currentUser.id);
+      myFollowingIds = new Set((data || []).map(f => f.following_id));
+    }
+
+    async function switchTab(tab) {
+      document.getElementById('tabFollowers').classList.toggle('active', tab === 'followers');
+      document.getElementById('tabFollowing').classList.toggle('active', tab === 'following');
+      document.getElementById('pageTitle').textContent = tab === 'followers' ? 'Followers' : 'Following';
+      document.getElementById('listContainer').innerHTML = '';
+      document.getElementById('emptyList').classList.add('hidden');
+      document.getElementById('listLoading').classList.remove('hidden');
+
+      await getMyFollowing();
+
+      let users = [];
+      if (tab === 'followers') {
+        const { data } = await supabaseClient
+          .from('follows')
+          .select('profiles!follows_follower_id_fkey(id, username, full_name, avatar_url, followers_count)')
+          .eq('following_id', profileId || currentUser.id);
+        users = (data || []).map(d => d.profiles).filter(Boolean);
+      } else {
+        const { data } = await supabaseClient
+          .from('follows')
+          .select('profiles!follows_following_id_fkey(id, username, full_name, avatar_url, followers_count)')
+          .eq('follower_id', profileId || currentUser.id);
+        users = (data || []).map(d => d.profiles).filter(Boolean);
+      }
+
+      document.getElementById('listLoading').classList.add('hidden');
+
+      if (!users.length) {
+        document.getElementById('emptyList').classList.remove('hidden');
+        document.getElementById('emptyMsg').textContent = tab === 'followers' ? 'No followers yet.' : 'Not following anyone yet.';
+        return;
+      }
+
+      const container = document.getElementById('listContainer');
+      users.forEach(user => {
+        const letter = (user.username || 'U')[0].toUpperCase();
+        const isMe = user.id === currentUser.id;
+        const isFollowing = myFollowingIds.has(user.id);
+        container.innerHTML += `
+          <div class="user-result-item" id="uitem-${user.id}">
+            <div class="user-result-left" onclick="window.location.href='${isMe ? 'profile.html' : 'user-profile.html?id=' + user.id}'">
+              <div class="user-avatar-med" style="${user.avatar_url ? 'padding:0;overflow:hidden' : ''}">
+                ${user.avatar_url
+                  ? `<img src="${user.avatar_url}" style="width:100%;height:100%;object-fit:cover"/>`
+                  : letter}
+              </div>
+              <div class="user-result-info">
+                <span class="user-result-username">${user.username}</span>
+                <span class="user-result-name">${user.full_name || ''}</span>
+                <span class="user-result-followers">${user.followers_count || 0} followers</span>
+              </div>
+            </div>
+            ${!isMe ? `
+              <button
+                class="follow-btn ${isFollowing ? 'following' : ''}"
+                id="fbtn-${user.id}"
+                onclick="toggleFollow('${user.id}', this)"
+              >${isFollowing ? 'Following' : 'Follow'}</button>
+            ` : ''}
+          </div>
+        `;
+      });
+    }
+
+    async function toggleFollow(userId, btn) {
+      const isFollowing = btn.classList.contains('following');
+      btn.disabled = true;
+      btn.classList.toggle('following', !isFollowing);
+      btn.textContent = isFollowing ? 'Follow' : 'Following';
+
+      if (isFollowing) {
+        await supabaseClient.from('follows').delete()
+          .eq('follower_id', currentUser.id).eq('following_id', userId);
+        await supabaseClient.rpc('decrement_followers', { target_id: userId });
+        await supabaseClient.rpc('decrement_following', { target_id: currentUser.id });
+      } else {
+        await supabaseClient.from('follows').insert({ follower_id: currentUser.id, following_id: userId });
+        await supabaseClient.rpc('increment_followers', { target_id: userId });
+        await supabaseClient.rpc('increment_following', { target_id: currentUser.id });
+      }
+      btn.disabled = false;
+    }
+  </script>
+</body>
+</html>
+ 
