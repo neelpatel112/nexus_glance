@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Messages — Instagram</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Grand+Hotel&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="app-body">
+
+  <header class="top-nav">
+    <button class="icon-btn" onclick="history.back()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <h2 class="upload-title" id="inboxUsername">Messages</h2>
+    <button class="icon-btn" onclick="showNewMessage()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+    </button>
+  </header>
+
+  <main class="main-content messages-main" id="inboxMain">
+
+    <div class="search-loading" id="inboxLoading">
+      <div class="spinner"></div>
+    </div>
+
+    <div id="threadsList"></div>
+
+    <div class="empty-inbox hidden" id="emptyInbox">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <h3>Your Messages</h3>
+      <p>Send private photos and messages to a friend.</p>
+      <button class="btn-primary small" onclick="showNewMessage()">Send Message</button>
+    </div>
+
+  </main>
+
+  <!-- New message modal -->
+  <div class="modal-overlay hidden" id="newMsgModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span class="modal-title">New Message</span>
+        <button class="icon-btn" onclick="closeNewMessage()">✕</button>
+      </div>
+      <div class="modal-search-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:#8e8e8e;flex-shrink:0"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="newMsgSearch" class="modal-search-input" placeholder="Search users…" oninput="searchForNew(this.value)"/>
+      </div>
+      <div id="newMsgResults" class="modal-results"></div>
+    </div>
+  </div>
+
+  <script src="auth.js"></script>
+  <script>
+    let currentUser = null;
+
+    supabaseClient.auth.getSession().then(({ data: { session } }) => {
+      if (!session) { window.location.href = 'index.html'; return; }
+      currentUser = session.user;
+      document.getElementById('inboxUsername').textContent =
+        currentUser.user_metadata?.username || 'Messages';
+      loadThreads();
+    });
+
+    async function loadThreads() {
+      document.getElementById('inboxLoading').classList.remove('hidden');
+
+      // Get all messages where user is sender or receiver, get latest per thread
+      const { data: messages } = await supabaseClient
+        .from('messages')
+        .select('*, sender:profiles!messages_sender_id_fkey(id,username,avatar_url), receiver:profiles!messages_receiver_id_fkey(id,username,avatar_url)')
+        .or(`sender_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`)
+        .order('created_at', { ascending: false });
+
+      document.getElementById('inboxLoading').classList.add('hidden');
+
+      if (!messages || messages.length === 0) {
+        document.getElementById('emptyInbox').classList.remove('hidden');
+        return;
+      }
+
+      // Deduplicate — one thread per conversation partner
+      const seen = new Set();
+      const threads = [];
+      messages.forEach(msg => {
+        const partnerId = msg.sender_id === currentUser.id ? msg.receiver_id : msg.sender_id;
+        if (!seen.has(partnerId)) {
+          seen.add(partnerId);
+          threads.push({ msg, partner: msg.sender_id === currentUser.id ? msg.receiver : msg.sender });
+        }
+      });
+
+      const list = document.getElementById('threadsList');
+      threads.forEach(({ msg, partner }) => {
+        if (!partner) return;
+        const letter = (partner.username || 'U')[0].toUpperCase();
+        const isMe = msg.sender_id === currentUser.id;
+        const preview = (isMe ? 'You: ' : '') + (msg.content.length > 35 ? msg.content.slice(0, 35) + '…' : msg.content);
+        const time = getTimeAgo(msg.created_at);
+        list.innerHTML += `
+          <div class="thread-item" onclick="window.location.href='chat.html?id=${partner.id}'">
+            <div class="user-avatar-med" style="${partner.avatar_url ? 'padding:0;overflow:hidden' : ''}">
+              ${partner.avatar_url ? `<img src="${partner.avatar_url}" style="width:100%;height:100%;object-fit:cover"/>` : letter}
+            </div>
+            <div class="thread-info">
+              <span class="thread-username">${partner.username}</span>
+              <span class="thread-preview">${preview}</span>
+            </div>
+            <span class="thread-time">${time}</span>
+          </div>
+        `;
+      });
+    }
+
+    function showNewMessage() {
+      document.getElementById('newMsgModal').classList.remove('hidden');
+      document.getElementById('newMsgSearch').focus();
+    }
+    function closeNewMessage() {
+      document.getElementById('newMsgModal').classList.add('hidden');
+      document.getElementById('newMsgResults').innerHTML = '';
+      document.getElementById('newMsgSearch').value = '';
+    }
+
+    let newMsgTimeout = null;
+    function searchForNew(val) {
+      clearTimeout(newMsgTimeout);
+      if (!val.trim()) { document.getElementById('newMsgResults').innerHTML = ''; return; }
+      newMsgTimeout = setTimeout(async () => {
+        const { data: users } = await supabaseClient
+          .from('profiles')
+          .select('id, username, full_name, avatar_url')
+          .ilike('username', `%${val.trim()}%`)
+          .neq('id', currentUser.id)
+          .limit(10);
+
+        const results = document.getElementById('newMsgResults');
+        if (!users || !users.length) {
+          results.innerHTML = '<p style="padding:16px;text-align:center;color:#8e8e8e;font-size:13px">No users found.</p>';
+          return;
+        }
+        results.innerHTML = users.map(u => {
+          const letter = (u.username || 'U')[0].toUpperCase();
+          return `
+            <div class="user-result-item" onclick="startChat('${u.id}')">
+              <div class="user-result-left">
+                <div class="user-avatar-med" style="${u.avatar_url ? 'padding:0;overflow:hidden' : ''}">
+                  ${u.avatar_url ? `<img src="${u.avatar_url}" style="width:100%;height:100%;object-fit:cover"/>` : letter}
+                </div>
+                <div class="user-result-info">
+                  <span class="user-result-username">${u.username}</span>
+                  <span class="user-result-name">${u.full_name || ''}</span>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }, 300);
+    }
+
+    function startChat(userId) {
+      closeNewMessage();
+      window.location.href = `chat.html?id=${userId}`;
+    }
+
+    function getTimeAgo(dateStr) {
+      const diff = Date.now() - new Date(dateStr);
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return 'now';
+      if (mins < 60) return `${mins}m`;
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return `${hrs}h`;
+      return `${Math.floor(hrs / 24)}d`;
+    }
+  </script>
+</body>
+</html>
+ 
