@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Chat — Instagram</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Grand+Hotel&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="app-body chat-body">
+
+  <header class="top-nav chat-nav">
+    <button class="icon-btn" onclick="history.back()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <div class="chat-nav-user" onclick="window.location.href='user-profile.html?id='+partnerId">
+      <div class="chat-nav-avatar" id="chatNavAvatar">U</div>
+      <div>
+        <div class="chat-nav-username" id="chatNavUsername">…</div>
+        <div class="chat-nav-status" id="chatNavStatus"></div>
+      </div>
+    </div>
+    <button class="icon-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.77a16 16 0 0 0 6 6l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 16a2 2 0 0 1 .27.92z"/></svg>
+    </button>
+  </header>
+
+  <main class="chat-main" id="chatMain">
+    <div class="search-loading" id="chatLoading"><div class="spinner"></div></div>
+    <div class="chat-messages" id="chatMessages"></div>
+  </main>
+
+  <div class="chat-input-bar">
+    <button class="icon-btn" style="flex-shrink:0">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+    </button>
+    <input
+      type="text"
+      id="msgInput"
+      class="chat-text-input"
+      placeholder="Message…"
+      maxlength="500"
+      onkeydown="if(event.key==='Enter') sendMessage()"
+      oninput="toggleSendBtn(this.value)"
+    />
+    <button class="icon-btn chat-send-btn hidden" id="sendBtn" onclick="sendMessage()">
+      <svg viewBox="0 0 24 24" fill="var(--ig-blue)" stroke="none"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
+    </button>
+    <button class="icon-btn heart-send-btn" id="heartSendBtn" onclick="sendHeart()">
+      <svg viewBox="0 0 24 24" fill="#ef4444" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+    </button>
+  </div>
+
+  <script src="auth.js"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const partnerId = params.get('id');
+    let currentUser = null;
+    let partnerProfile = null;
+    let realtimeChannel = null;
+
+    if (!partnerId) window.location.href = 'messages.html';
+
+    supabaseClient.auth.getSession().then(({ data: { session } }) => {
+      if (!session) { window.location.href = 'index.html'; return; }
+      currentUser = session.user;
+      init();
+    });
+
+    async function init() {
+      // Load partner profile
+      const { data: partner } = await supabaseClient
+        .from('profiles').select('*').eq('id', partnerId).single();
+      partnerProfile = partner;
+
+      if (partner) {
+        const letter = (partner.username || 'U')[0].toUpperCase();
+        document.getElementById('chatNavUsername').textContent = partner.username;
+        document.getElementById('chatNavAvatar').textContent = letter;
+        if (partner.avatar_url) {
+          document.getElementById('chatNavAvatar').innerHTML =
+            `<img src="${partner.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>`;
+        }
+      }
+
+      await loadMessages();
+      subscribeRealtime();
+    }
+
+    async function loadMessages() {
+      document.getElementById('chatLoading').classList.remove('hidden');
+
+      const { data: messages } = await supabaseClient
+        .from('messages')
+        .select('*')
+        .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${currentUser.id})`)
+        .order('created_at', { ascending: true });
+
+      document.getElementById('chatLoading').classList.add('hidden');
+
+      const container = document.getElementById('chatMessages');
+      container.innerHTML = '';
+
+      if (!messages || messages.length === 0) {
+        container.innerHTML = buildDateDivider('Today');
+        return;
+      }
+
+      let lastDate = null;
+      messages.forEach(msg => {
+        const msgDate = new Date(msg.created_at).toDateString();
+        if (msgDate !== lastDate) {
+          container.innerHTML += buildDateDivider(formatDate(msg.created_at));
+          lastDate = msgDate;
+        }
+        container.innerHTML += buildMessage(msg);
+      });
+
+      scrollToBottom();
+    }
+
+    function buildMessage(msg) {
+      const isMe = msg.sender_id === currentUser.id;
+      const time = formatTime(msg.created_at);
+      return `
+        <div class="msg-wrap ${isMe ? 'msg-mine' : 'msg-theirs'}">
+          ${!isMe ? `<div class="msg-avatar-tiny">${(partnerProfile?.username || 'U')[0].toUpperCase()}</div>` : ''}
+          <div class="msg-bubble ${isMe ? 'bubble-mine' : 'bubble-theirs'}" title="${time}">
+            ${msg.content}
+          </div>
+        </div>
+      `;
+    }
+
+    function buildDateDivider(label) {
+      return `<div class="chat-date-divider">${label}</div>`;
+    }
+
+    function subscribeRealtime() {
+      realtimeChannel = supabaseClient
+        .channel('messages-' + currentUser.id)
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `receiver_id=eq.${currentUser.id}`
+        }, (payload) => {
+          const msg = payload.new;
+          if (msg.sender_id !== partnerId) return; // only show messages from this partner
+          document.getElementById('chatMessages').innerHTML += buildMessage(msg);
+          scrollToBottom();
+        })
+        .subscribe();
+    }
+
+    function toggleSendBtn(val) {
+      const hasText = val.trim().length > 0;
+      document.getElementById('sendBtn').classList.toggle('hidden', !hasText);
+      document.getElementById('heartSendBtn').classList.toggle('hidden', hasText);
+    }
+
+    async function sendMessage() {
+      const input = document.getElementById('msgInput');
+      const content = input.value.trim();
+      if (!content) return;
+
+      // Optimistic UI
+      const tempMsg = {
+        id: 'temp-' + Date.now(),
+        sender_id: currentUser.id,
+        receiver_id: partnerId,
+        content,
+        created_at: new Date().toISOString()
+      };
+      document.getElementById('chatMessages').innerHTML += buildMessage(tempMsg);
+      input.value = '';
+      toggleSendBtn('');
+      scrollToBottom();
+
+      await supabaseClient.from('messages').insert({
+        sender_id:   currentUser.id,
+        receiver_id: partnerId,
+        content
+      });
+    }
+
+    async function sendHeart() {
+      const tempMsg = {
+        sender_id: currentUser.id,
+        receiver_id: partnerId,
+        content: '❤️',
+        created_at: new Date().toISOString()
+      };
+      document.getElementById('chatMessages').innerHTML += buildMessage(tempMsg);
+      scrollToBottom();
+
+      await supabaseClient.from('messages').insert({
+        sender_id: currentUser.id,
+        receiver_id: partnerId,
+        content: '❤️'
+      });
+    }
+
+    function scrollToBottom() {
+      const el = document.getElementById('chatMessages');
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function formatTime(dateStr) {
+      return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function formatDate(dateStr) {
+      const d = new Date(dateStr);
+      const today = new Date();
+      if (d.toDateString() === today.toDateString()) return 'Today';
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+      if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+      return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    }
+  </script>
+</body>
+</html>
+ 
