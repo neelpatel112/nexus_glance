@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>New Post — Instagram</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Grand+Hotel&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="app-body">
+
+  <!-- TOP NAV -->
+  <header class="top-nav">
+    <button class="icon-btn" onclick="history.back()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <h2 class="upload-title">New post</h2>
+    <button class="share-btn" id="shareBtn" onclick="handlePost()" disabled>Share</button>
+  </header>
+
+  <main class="main-content upload-main">
+
+    <!-- STEP 1: Pick image -->
+    <div id="step1" class="upload-step">
+      <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+        <div class="drop-inner">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg>
+          <p>Tap to select a photo</p>
+          <span>from your gallery</span>
+        </div>
+      </div>
+      <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="handleFileSelect(event)"/>
+    </div>
+
+    <!-- STEP 2: Preview + details -->
+    <div id="step2" class="upload-step hidden">
+
+      <!-- Square preview -->
+      <div class="preview-wrap">
+        <div class="square-preview" id="squarePreview">
+          <img id="previewImg" src="" alt="preview"/>
+          <div class="preview-overlay">
+            <button class="change-photo-btn" onclick="resetUpload()">Change Photo</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filter strip (visual only) -->
+      <div class="filter-strip">
+        <div class="filter-item active" onclick="applyFilter(this, 'none')">
+          <div class="filter-thumb" style="filter:none" id="fNone"></div>
+          <span>Normal</span>
+        </div>
+        <div class="filter-item" onclick="applyFilter(this, 'grayscale(100%)')">
+          <div class="filter-thumb" style="filter:grayscale(100%)"></div>
+          <span>Mono</span>
+        </div>
+        <div class="filter-item" onclick="applyFilter(this, 'sepia(80%)')">
+          <div class="filter-thumb" style="filter:sepia(80%)"></div>
+          <span>Warm</span>
+        </div>
+        <div class="filter-item" onclick="applyFilter(this, 'contrast(1.2) brightness(1.1)')">
+          <div class="filter-thumb" style="filter:contrast(1.2) brightness(1.1)"></div>
+          <span>Vivid</span>
+        </div>
+        <div class="filter-item" onclick="applyFilter(this, 'brightness(1.15) saturate(1.3)')">
+          <div class="filter-thumb" style="filter:brightness(1.15) saturate(1.3)"></div>
+          <span>Pop</span>
+        </div>
+        <div class="filter-item" onclick="applyFilter(this, 'hue-rotate(30deg) saturate(1.2)')">
+          <div class="filter-thumb" style="filter:hue-rotate(30deg) saturate(1.2)"></div>
+          <span>Cool</span>
+        </div>
+      </div>
+
+      <!-- Details form -->
+      <div class="post-details">
+
+        <!-- User row -->
+        <div class="detail-user-row">
+          <div class="post-avatar" id="uploadAvatar">U</div>
+          <textarea
+            id="captionInput"
+            class="caption-textarea"
+            placeholder="Write a caption…"
+            maxlength="2200"
+            rows="3"
+          ></textarea>
+        </div>
+        <div class="char-count" id="charCount">0 / 2200</div>
+
+        <hr class="detail-divider"/>
+
+        <!-- Location -->
+        <div class="detail-row" onclick="document.getElementById('locationInput').focus()">
+          <input type="text" id="locationInput" class="detail-input" placeholder="Add location"/>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        </div>
+
+        <hr class="detail-divider"/>
+
+        <!-- Tags -->
+        <div class="detail-row tags-row">
+          <div class="tags-wrap">
+            <div class="tags-list" id="tagsList"></div>
+            <input
+              type="text"
+              id="tagInput"
+              class="tag-input"
+              placeholder="Add tags (e.g. sunset)"
+              onkeydown="handleTagKey(event)"
+            />
+          </div>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+        </div>
+
+        <hr class="detail-divider"/>
+
+        <!-- Advanced toggles -->
+        <div class="detail-row toggle-row">
+          <span>Hide like count</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="hideLikes"/>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <hr class="detail-divider"/>
+        <div class="detail-row toggle-row">
+          <span>Turn off commenting</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="noComments"/>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Upload progress overlay -->
+    <div class="upload-overlay hidden" id="uploadOverlay">
+      <div class="upload-progress-card">
+        <div class="progress-ring-wrap">
+          <svg class="progress-ring" viewBox="0 0 60 60">
+            <circle class="ring-bg" cx="30" cy="30" r="24"/>
+            <circle class="ring-fill" id="ringFill" cx="30" cy="30" r="24" stroke-dasharray="150.8" stroke-dashoffset="150.8"/>
+          </svg>
+          <span class="progress-pct" id="progressPct">0%</span>
+        </div>
+        <p id="uploadStatus">Uploading photo…</p>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottom-nav">
+    <a href="home.html" class="nav-item">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+    </a>
+    <a href="search.html" class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    </a>
+    <a href="upload.html" class="nav-item active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+    </a>
+    <a href="reels.html" class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="M10 8l6 4-6 4V8z"/></svg>
+    </a>
+    <a href="profile.html" class="nav-item">
+      <div class="nav-avatar" id="navAvatar">U</div>
+    </a>
+  </nav>
+
+  <script src="auth.js"></script>
+  <script>
+    let currentUser = null;
+    let selectedFile = null;
+    let tags = [];
+    let currentFilter = 'none';
+
+    // Auth guard
+    supabaseClient.auth.getSession().then(({ data: { session } }) => {
+      if (!session) { window.location.href = 'index.html'; return; }
+      currentUser = session.user;
+      const letter = (currentUser.user_metadata?.username || currentUser.email || 'U')[0].toUpperCase();
+      document.getElementById('navAvatar').textContent = letter;
+      document.getElementById('uploadAvatar').textContent = letter;
+    });
+
+    // File select
+    function handleFileSelect(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      selectedFile = file;
+      const url = URL.createObjectURL(file);
+      document.getElementById('previewImg').src = url;
+
+      // Set filter thumbs background
+      document.querySelectorAll('.filter-thumb').forEach(el => {
+        el.style.backgroundImage = `url(${url})`;
+        el.style.backgroundSize = 'cover';
+        el.style.backgroundPosition = 'center';
+      });
+
+      document.getElementById('step1').classList.add('hidden');
+      document.getElementById('step2').classList.remove('hidden');
+      document.getElementById('shareBtn').disabled = false;
+    }
+
+    function resetUpload() {
+      selectedFile = null;
+      document.getElementById('step2').classList.add('hidden');
+      document.getElementById('step1').classList.remove('hidden');
+      document.getElementById('shareBtn').disabled = true;
+      document.getElementById('fileInput').value = '';
+      tags = [];
+      renderTags();
+    }
+
+    // Caption char count
+    document.getElementById('captionInput')?.addEventListener('input', function() {
+      document.getElementById('charCount').textContent = `${this.value.length} / 2200`;
+    });
+
+    // Filters
+    function applyFilter(el, filterVal) {
+      currentFilter = filterVal;
+      document.querySelectorAll('.filter-item').forEach(f => f.classList.remove('active'));
+      el.classList.add('active');
+      document.getElementById('previewImg').style.filter = filterVal;
+    }
+
+    // Tags
+    function handleTagKey(e) {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === ',') {
+        e.preventDefault();
+        const val = e.target.value.replace(/[#,\s]/g, '').trim();
+        if (val && !tags.includes(val) && tags.length < 10) {
+          tags.push(val);
+          renderTags();
+        }
+        e.target.value = '';
+      }
+    }
+
+    function renderTags() {
+      const list = document.getElementById('tagsList');
+      list.innerHTML = tags.map((t, i) => `
+        <span class="tag-chip">#${t}<button onclick="removeTag(${i})">×</button></span>
+      `).join('');
+    }
+
+    function removeTag(i) {
+      tags.splice(i, 1);
+      renderTags();
+    }
+
+    // Upload progress ring
+    function setProgress(pct) {
+      const circumference = 150.8;
+      const offset = circumference - (pct / 100) * circumference;
+      document.getElementById('ringFill').style.strokeDashoffset = offset;
+      document.getElementById('progressPct').textContent = `${Math.round(pct)}%`;
+    }
+
+    // POST
+    async function handlePost() {
+      if (!selectedFile || !currentUser) return;
+
+      const caption  = document.getElementById('captionInput').value.trim();
+      const location = document.getElementById('locationInput').value.trim();
+      const tagStr   = tags.join(',');
+
+      // Show overlay
+      document.getElementById('uploadOverlay').classList.remove('hidden');
+      document.getElementById('shareBtn').disabled = true;
+      setProgress(10);
+
+      try {
+        // 1. Upload image to Supabase Storage
+        const ext = selectedFile.name.split('.').pop();
+        const fileName = `${currentUser.id}/${Date.now()}.${ext}`;
+
+        document.getElementById('uploadStatus').textContent = 'Uploading photo…';
+        setProgress(30);
+
+        const { data: storageData, error: storageError } = await supabaseClient
+          .storage
+          .from('posts')
+          .upload(fileName, selectedFile, { cacheControl: '3600', upsert: false });
+
+        if (storageError) throw storageError;
+        setProgress(65);
+
+        // 2. Get public URL
+        const { data: urlData } = supabaseClient.storage.from('posts').getPublicUrl(fileName);
+        const imageUrl = urlData.publicUrl;
+        setProgress(80);
+
+        // 3. Insert post into DB
+        document.getElementById('uploadStatus').textContent = 'Saving post…';
+
+        const { error: postError } = await supabaseClient.from('posts').insert({
+          user_id:     currentUser.id,
+          image_url:   imageUrl,
+          caption:     caption || null,
+          location:    location || null,
+          tags:        tagStr || null,
+          likes_count: 0,
+        });
+
+        if (postError) throw postError;
+        setProgress(100);
+
+        document.getElementById('uploadStatus').textContent = 'Posted! 🎉';
+        setTimeout(() => { window.location.href = 'profile.html'; }, 900);
+
+      } catch (err) {
+        document.getElementById('uploadOverlay').classList.add('hidden');
+        document.getElementById('shareBtn').disabled = false;
+        alert('Error: ' + err.message);
+      }
+    }
+  </script>
+</body>
+</html>
+ 
