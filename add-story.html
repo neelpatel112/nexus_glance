@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Add Story — Instagram</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Grand+Hotel&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="app-body">
+
+  <header class="top-nav">
+    <button class="icon-btn" onclick="history.back()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <h2 class="upload-title">Add to Story</h2>
+    <button class="share-btn" id="shareBtn" onclick="uploadStory()" disabled>Share</button>
+  </header>
+
+  <main class="main-content upload-main">
+
+    <div id="step1" class="upload-step">
+      <div class="drop-zone" onclick="document.getElementById('storyFileInput').click()">
+        <div class="drop-inner">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+          <p>Add to your story</p>
+          <span>Photo disappears after 24 hours</span>
+        </div>
+      </div>
+      <input type="file" id="storyFileInput" accept="image/*" style="display:none" onchange="previewStory(event)"/>
+    </div>
+
+    <div id="step2" class="upload-step hidden">
+      <div class="story-preview-wrap">
+        <img id="storyPreviewImg" src="" alt="preview" class="story-preview-img"/>
+        <div class="story-caption-input-wrap">
+          <input type="text" id="storyCaptionText" class="story-caption-input" placeholder="Add a caption…" maxlength="100"/>
+        </div>
+      </div>
+      <button class="change-photo-btn-text" onclick="resetStory()">Change Photo</button>
+    </div>
+
+    <div class="upload-overlay hidden" id="storyUploadOverlay">
+      <div class="upload-progress-card">
+        <div class="progress-ring-wrap">
+          <svg class="progress-ring" viewBox="0 0 60 60">
+            <circle class="ring-bg" cx="30" cy="30" r="24"/>
+            <circle class="ring-fill" id="storyRingFill" cx="30" cy="30" r="24" stroke-dasharray="150.8" stroke-dashoffset="150.8"/>
+          </svg>
+          <span class="progress-pct" id="storyProgressPct">0%</span>
+        </div>
+        <p id="storyUploadStatus">Uploading story…</p>
+      </div>
+    </div>
+
+  </main>
+
+  <script src="auth.js"></script>
+  <script>
+    let currentUser = null
+    let selectedFile = null
+
+    supabaseClient.auth.getSession().then(({ data: { session } }) => {
+      if (!session) { window.location.href = 'index.html'; return }
+      currentUser = session.user
+    })
+
+    function previewStory(e) {
+      const file = e.target.files[0]
+      if (!file) return
+      selectedFile = file
+      document.getElementById('storyPreviewImg').src = URL.createObjectURL(file)
+      document.getElementById('step1').classList.add('hidden')
+      document.getElementById('step2').classList.remove('hidden')
+      document.getElementById('shareBtn').disabled = false
+    }
+
+    function resetStory() {
+      selectedFile = null
+      document.getElementById('step2').classList.add('hidden')
+      document.getElementById('step1').classList.remove('hidden')
+      document.getElementById('shareBtn').disabled = true
+      document.getElementById('storyFileInput').value = ''
+    }
+
+    function setProgress(pct) {
+      const offset = 150.8 - (pct / 100) * 150.8
+      document.getElementById('storyRingFill').style.strokeDashoffset = offset
+      document.getElementById('storyProgressPct').textContent = `${Math.round(pct)}%`
+    }
+
+    async function uploadStory() {
+      if (!selectedFile || !currentUser) return
+      document.getElementById('storyUploadOverlay').classList.remove('hidden')
+      document.getElementById('shareBtn').disabled = true
+      setProgress(20)
+
+      try {
+        const ext = selectedFile.name.split('.').pop()
+        const fileName = `stories/${currentUser.id}/${Date.now()}.${ext}`
+
+        const { error: uploadErr } = await supabaseClient.storage
+          .from('posts').upload(fileName, selectedFile)
+        if (uploadErr) throw uploadErr
+        setProgress(60)
+
+        const { data: urlData } = supabaseClient.storage.from('posts').getPublicUrl(fileName)
+        setProgress(80)
+
+        const caption = document.getElementById('storyCaptionText').value.trim()
+        const { error } = await supabaseClient.from('stories').insert({
+          user_id:   currentUser.id,
+          image_url: urlData.publicUrl,
+          caption:   caption || null,
+          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+        })
+        if (error) throw error
+
+        setProgress(100)
+        document.getElementById('storyUploadStatus').textContent = 'Story posted! 🎉'
+        setTimeout(() => window.location.href = 'home.html', 800)
+      } catch (err) {
+        document.getElementById('storyUploadOverlay').classList.add('hidden')
+        document.getElementById('shareBtn').disabled = false
+        alert('Error: ' + err.message)
+      }
+    }
+  </script>
+</body>
+</html>
