@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Stories — Instagram</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Grand+Hotel&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="app-body story-body">
+
+  <!-- Story Viewer -->
+  <div class="story-viewer" id="storyViewer">
+
+    <!-- Progress bars -->
+    <div class="story-progress-bars" id="progressBars"></div>
+
+    <!-- Top bar -->
+    <div class="story-top-bar">
+      <div class="story-user-info">
+        <div class="story-viewer-avatar" id="storyViewerAvatar">U</div>
+        <div>
+          <span class="story-viewer-username" id="storyViewerUsername">username</span>
+          <span class="story-viewer-time" id="storyViewerTime">2h ago</span>
+        </div>
+      </div>
+      <div class="story-top-actions">
+        <button class="story-icon-btn" onclick="pauseStory()" id="pauseBtn">
+          <svg viewBox="0 0 24 24" fill="white" width="20" height="20"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+        </button>
+        <button class="story-icon-btn" onclick="closeStory()">
+          <svg viewBox="0 0 24 24" fill="white" width="20" height="20"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Story image -->
+    <div class="story-image-wrap" id="storyImageWrap">
+      <img id="storyImage" src="" alt="story" class="story-image"/>
+      <div class="story-caption-overlay" id="storyCaptionOverlay"></div>
+    </div>
+
+    <!-- Tap zones -->
+    <div class="story-tap-prev" onclick="prevStory()"></div>
+    <div class="story-tap-next" onclick="nextStory()"></div>
+
+    <!-- Bottom reply bar -->
+    <div class="story-reply-bar">
+      <input type="text" class="story-reply-input" placeholder="Send message" id="storyReplyInput"/>
+      <button class="story-reply-send" onclick="sendStoryReply()">
+        <svg viewBox="0 0 24 24" fill="white" width="20" height="20"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+      </button>
+      <button class="story-like-btn" onclick="likeStory()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" width="24" height="24" id="storyHeartIcon"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <script src="auth.js"></script>
+  <script>
+    const params      = new URLSearchParams(window.location.search)
+    const userId      = params.get('user')
+    const startIndex  = parseInt(params.get('index') || '0')
+
+    let currentUser   = null
+    let stories       = []
+    let currentIndex  = startIndex
+    let timer         = null
+    let paused        = false
+    let DURATION      = 5000
+
+    supabaseClient.auth.getSession().then(({ data: { session } }) => {
+      if (!session) { window.location.href = 'index.html'; return }
+      currentUser = session.user
+      loadStories()
+    })
+
+    async function loadStories() {
+      const targetId = userId || currentUser.id
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+
+      const { data } = await supabaseClient
+        .from('stories')
+        .select('*, profiles(username, avatar_url)')
+        .eq('user_id', targetId)
+        .gte('created_at', since)
+        .order('created_at', { ascending: true })
+
+      if (!data || data.length === 0) {
+        window.location.href = 'home.html'
+        return
+      }
+
+      stories = data
+      buildProgressBars()
+      showStory(currentIndex)
+    }
+
+    function buildProgressBars() {
+      const container = document.getElementById('progressBars')
+      container.innerHTML = stories.map((_, i) => `
+        <div class="story-prog-wrap">
+          <div class="story-prog-fill" id="prog-${i}"></div>
+        </div>
+      `).join('')
+    }
+
+    function showStory(index) {
+      if (index >= stories.length) { closeStory(); return }
+      if (index < 0) { closeStory(); return }
+
+      currentIndex = index
+      const story = stories[index]
+      const profile = story.profiles
+
+      // Image
+      document.getElementById('storyImage').src = story.image_url
+      document.getElementById('storyCaptionOverlay').textContent = story.caption || ''
+
+      // User info
+      const letter = (profile?.username || 'U')[0].toUpperCase()
+      document.getElementById('storyViewerAvatar').textContent = letter
+      document.getElementById('storyViewerUsername').textContent = profile?.username || 'user'
+      document.getElementById('storyViewerTime').textContent = getTimeAgo(story.created_at)
+
+      // Progress bars
+      stories.forEach((_, i) => {
+        const bar = document.getElementById('prog-' + i)
+        if (i < index) bar.style.width = '100%'
+        else if (i === index) bar.style.width = '0%'
+        else bar.style.width = '0%'
+      })
+
+      startProgress(index)
+    }
+
+    function startProgress(index) {
+      clearTimeout(timer)
+      if (paused) return
+
+      const bar = document.getElementById('prog-' + index)
+      bar.style.transition = `width ${DURATION}ms linear`
+      bar.style.width = '100%'
+
+      timer = setTimeout(() => nextStory(), DURATION)
+    }
+
+    function nextStory() {
+      clearTimeout(timer)
+      const bar = document.getElementById('prog-' + currentIndex)
+      if (bar) { bar.style.transition = 'none'; bar.style.width = '100%' }
+      showStory(currentIndex + 1)
+    }
+
+    function prevStory() {
+      clearTimeout(timer)
+      const bar = document.getElementById('prog-' + currentIndex)
+      if (bar) { bar.style.transition = 'none'; bar.style.width = '0%' }
+      showStory(Math.max(0, currentIndex - 1))
+    }
+
+    function pauseStory() {
+      paused = !paused
+      const btn = document.getElementById('pauseBtn')
+      if (paused) {
+        clearTimeout(timer)
+        const bar = document.getElementById('prog-' + currentIndex)
+        bar.style.transition = 'none'
+        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="white" width="20" height="20"><path d="M8 5v14l11-7z"/></svg>`
+      } else {
+        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="white" width="20" height="20"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`
+        startProgress(currentIndex)
+      }
+    }
+
+    function closeStory() {
+      clearTimeout(timer)
+      window.location.href = 'home.html'
+    }
+
+    function likeStory() {
+      const icon = document.getElementById('storyHeartIcon')
+      icon.setAttribute('fill', '#ef4444')
+      icon.setAttribute('stroke', '#ef4444')
+      setTimeout(() => {
+        icon.setAttribute('fill', 'none')
+        icon.setAttribute('stroke', 'white')
+      }, 1000)
+    }
+
+    function sendStoryReply() {
+      const input = document.getElementById('storyReplyInput')
+      if (!input.value.trim()) return
+      input.value = ''
+    }
+
+    function getTimeAgo(dateStr) {
+      const diff = Date.now() - new Date(dateStr)
+      const hrs = Math.floor(diff / 3600000)
+      if (hrs < 1) return `${Math.floor(diff / 60000)}m ago`
+      return `${hrs}h ago`
+    }
+
+    // Keyboard controls
+    document.addEventListener('keydown', e => {
+      if (e.key === 'ArrowRight') nextStory()
+      if (e.key === 'ArrowLeft')  prevStory()
+      if (e.key === 'Escape')     closeStory()
+      if (e.key === ' ')          pauseStory()
+    })
+  </script>
+</body>
+</html>
+ 
