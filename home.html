@@ -29,7 +29,7 @@
 
     <!-- STORIES BAR -->
     <section class="stories-bar">
-      <div class="story-item your-story">
+      <div class="story-item your-story" onclick="window.location.href='add-story.html'">
         <div class="story-avatar-wrap">
           <div class="story-avatar add-story-avatar" id="yourStoryAvatar">
             <span id="yourAvatarLetter">+</span>
@@ -149,7 +149,45 @@
       document.getElementById('navAvatar').textContent = letter;
       document.getElementById('yourAvatarLetter').textContent = letter;
       loadFeed(user);
+      loadStories(user);
     });
+
+    async function loadStories(user) {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data: stories } = await supabaseClient
+        .from('stories')
+        .select('user_id, profiles(username), image_url, created_at')
+        .gte('created_at', since)
+        .neq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (!stories || !stories.length) return;
+
+      // Deduplicate by user
+      const seen = new Set();
+      const bar = document.querySelector('.stories-bar');
+      // Remove placeholder stories
+      bar.querySelectorAll('.story-item:not(.your-story)').forEach(el => el.remove());
+
+      stories.forEach(s => {
+        if (seen.has(s.user_id)) return;
+        seen.add(s.user_id);
+        const username = s.profiles?.username || 'user';
+        const letter = username[0].toUpperCase();
+        const colors = ['linear-gradient(135deg,#f472b6,#a855f7)', 'linear-gradient(135deg,#fb923c,#f43f5e)', 'linear-gradient(135deg,#34d399,#059669)', 'linear-gradient(135deg,#60a5fa,#6366f1)', 'linear-gradient(135deg,#fbbf24,#f97316)'];
+        const color = colors[Math.floor(Math.random() * colors.length)];
+        const div = document.createElement('div');
+        div.className = 'story-item';
+        div.innerHTML = `
+          <div class="story-avatar-wrap story-ring">
+            <div class="story-avatar" style="background:${color}"><span>${letter}</span></div>
+          </div>
+          <span class="story-name">${username}</span>
+        `;
+        div.onclick = () => window.location.href = `story-viewer.html?user=${s.user_id}`;
+        bar.appendChild(div);
+      });
+    }
 
     async function loadFeed(user) {
       // Remove skeletons
